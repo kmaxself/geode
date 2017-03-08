@@ -30,6 +30,7 @@ import org.apache.geode.management.internal.cli.GfshParseResult;
 import org.apache.geode.management.internal.cli.functions.ExportLogsFunction;
 import org.apache.geode.management.internal.cli.i18n.CliStrings;
 import org.apache.geode.management.internal.cli.result.ResultBuilder;
+import org.apache.geode.management.internal.cli.shell.Gfsh;
 import org.apache.geode.management.internal.cli.util.ExportLogsCacheWriter;
 import org.apache.geode.management.internal.configuration.utils.ZipUtils;
 import org.apache.geode.management.internal.security.ResourceOperation;
@@ -51,9 +52,9 @@ import java.util.Map;
 import java.util.Set;
 
 public class ExportLogCommand implements CommandMarker {
-  public final static String FORMAT = "yyyy/MM/dd/HH/mm/ss/SSS/z";
-  public final static String ONLY_DATE_FORMAT = "yyyy/MM/dd";
-  private final static Logger logger = LogService.getLogger();
+  private static final Logger logger = LogService.getLogger();
+  public static final String FORMAT = "yyyy/MM/dd/HH/mm/ss/SSS/z";
+  public static final String ONLY_DATE_FORMAT = "yyyy/MM/dd";
 
   @CliCommand(value = CliStrings.EXPORT_LOGS, help = CliStrings.EXPORT_LOGS__HELP)
   @CliMetaData(shellOnly = false, isFileDownloadOverHttp = true,
@@ -142,6 +143,12 @@ public class ExportLogCommand implements CommandMarker {
       logger.info("Zipping into: " + exportedLogsZipFile.toString());
       ZipUtils.zipDirectory(exportedLogsDir, exportedLogsZipFile);
       FileUtils.deleteDirectory(tempDir.toFile());
+
+      // TODO:GEODE-2420: warn user if exportedLogsZipFile size > threshold
+      if (isOverDiskSpaceThreshold()) {
+        // append warning to exportedLogsZipFile.toString()??
+      }
+
       result = ResultBuilder.createInfoResult(exportedLogsZipFile.toString());
     } catch (Exception ex) {
       logger.error(ex, ex);
@@ -151,6 +158,14 @@ public class ExportLogCommand implements CommandMarker {
     }
     logger.debug("Exporting logs returning = {}", result);
     return result;
+  }
+
+  protected static Gfsh getGfsh() {
+    return Gfsh.getCurrentInstance();
+  }
+
+  boolean isOverDiskSpaceThreshold() {
+    return false;
   }
 
   /**

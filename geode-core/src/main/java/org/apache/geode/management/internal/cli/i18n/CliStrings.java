@@ -1434,6 +1434,9 @@ public class CliStrings {
   public static final String EXPORT_LOGS__STATSONLY = "stats-only";
   public static final String EXPORT_LOGS__LOGSONLY__HELP = "Whether to only export logs";
   public static final String EXPORT_LOGS__STATSONLY__HELP = "Whether to only export statistics";
+  public static final String EXPORT_LOGS__FILESIZELIMIT = "file-size-limit";
+  public static final String
+      EXPORT_LOGS__FILESIZELIMIT__HELP = "Limits size of the file that can be exported. Specify zero for no limit. Value is in megabytes by default or [m|g|t] may be specified.";
 
   /* export stack-trace command */
   public static final String EXPORT_STACKTRACE = "export stack-traces";

@@ -24,32 +24,28 @@ import org.apache.geode.internal.logging.LogService;
 import org.apache.geode.management.cli.CliMetaData;
 import org.apache.geode.management.cli.ConverterHint;
 import org.apache.geode.management.cli.Result;
-import org.apache.geode.management.internal.cli.AbstractCliAroundInterceptor;
 import org.apache.geode.management.internal.cli.CliUtil;
-import org.apache.geode.management.internal.cli.GfshParseResult;
 import org.apache.geode.management.internal.cli.functions.ExportLogsFunction;
 import org.apache.geode.management.internal.cli.i18n.CliStrings;
 import org.apache.geode.management.internal.cli.result.ResultBuilder;
-import org.apache.geode.management.internal.cli.shell.Gfsh;
 import org.apache.geode.management.internal.cli.util.ExportLogsCacheWriter;
 import org.apache.geode.management.internal.configuration.utils.ZipUtils;
 import org.apache.geode.management.internal.security.ResourceOperation;
 import org.apache.geode.security.ResourcePermission;
-import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.Logger;
 import org.springframework.shell.core.CommandMarker;
 import org.springframework.shell.core.annotation.CliCommand;
 import org.springframework.shell.core.annotation.CliOption;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ExportLogsCommand implements CommandMarker {
 
@@ -58,11 +54,7 @@ public class ExportLogsCommand implements CommandMarker {
   public static final String FORMAT = "yyyy/MM/dd/HH/mm/ss/SSS/z";
   public static final String ONLY_DATE_FORMAT = "yyyy/MM/dd";
 
-  private GemFireCacheImpl cache;
-
-  public ExportLogsCommand() {
-    cache = GemFireCacheImpl.getInstance();
-  }
+  private static final Pattern DISK_SPACE_LIMIT_PATTERN = Pattern.compile("(\\d+)([mgtMGT]?)");
 
   @CliCommand(value = CliStrings.EXPORT_LOGS, help = CliStrings.EXPORT_LOGS__HELP)
   @CliMetaData(shellOnly = false, isFileDownloadOverHttp = true,
@@ -100,15 +92,12 @@ public class ExportLogsCommand implements CommandMarker {
           help = CliStrings.EXPORT_LOGS__LOGSONLY__HELP) boolean logsOnly,
       @CliOption(key = CliStrings.EXPORT_LOGS__STATSONLY, unspecifiedDefaultValue = "false",
           specifiedDefaultValue = "true",
-          help = CliStrings.EXPORT_LOGS__STATSONLY__HELP) boolean statsOnly) {
+          help = CliStrings.EXPORT_LOGS__STATSONLY__HELP) boolean statsOnly,
+      @CliOption(key = CliStrings.EXPORT_LOGS__FILESIZELIMIT, unspecifiedDefaultValue = "false",
+          specifiedDefaultValue = "true",
+          help = CliStrings.EXPORT_LOGS__FILESIZELIMIT__HELP) String fileSizeLimit) {
     Result result = null;
-    GemFireCacheImpl cache = this.cache;
-    if (cache == null || cache.isClosed()) {
-      new Exception("KEN: cache is null").printStackTrace();
-      cache = GemFireCacheImpl.getInstance();
-    } else {
-      new Exception("KEN: cache has been created").printStackTrace();
-    }
+    GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
     try {
       Set<DistributedMember> targetMembers =
           CliUtil.findMembersIncludingLocators(groups, memberIds);
@@ -165,10 +154,7 @@ public class ExportLogsCommand implements CommandMarker {
       ZipUtils.zipDirectory(exportedLogsDir, exportedLogsZipFile);
       FileUtils.deleteDirectory(tempDir.toFile());
 
-      // TODO:GEODE-2420: warn user if exportedLogsZipFile size > threshold
-      if (isOverDiskSpaceThreshold()) {
-        // append warning to exportedLogsZipFile.toString()??
-      }
+      checkOverDiskSpaceThreshold(parseFileSizeLimit(fileSizeLimit), exportedLogsZipFile.toFile());
 
       result = ResultBuilder.createInfoResult(exportedLogsZipFile.toString());
     } catch (Exception ex) {
@@ -181,12 +167,54 @@ public class ExportLogsCommand implements CommandMarker {
     return result;
   }
 
-  protected static Gfsh getGfsh() {
-    return Gfsh.getCurrentInstance();
+  /**
+   * Returns file size limit in bytes
+   */
+  int parseFileSizeLimit(String fileSizeLimit) {
+    if (StringUtils.isEmpty(fileSizeLimit)) {
+      return 0;
+    }
+
+    int sizeLimit = parseSize(fileSizeLimit);
+    int byteMultiplier = parseByteMultiplier(fileSizeLimit);
+
+    return sizeLimit * byteMultiplier;
   }
 
-  boolean isOverDiskSpaceThreshold() {
-    return false;
+  /**
+   * Throws IllegalArgumentException if file size is over fileSizeLimitBytes
+   */
+  void checkOverDiskSpaceThreshold(int fileSizeLimitBytes, File file) {
+    // TODO:GEODE-2420: warn user if exportedLogsZipFile size > threshold
+    if (FileUtils.sizeOf(file) > fileSizeLimitBytes) {
+      throw new IllegalArgumentException("TOO BIG"); // FileTooBigException
+    }
   }
+
+  static int parseSize(String diskSpaceLimit) {
+    Matcher matcher = DISK_SPACE_LIMIT_PATTERN.matcher(diskSpaceLimit);
+    if (matcher.matches()) {
+      return Integer.parseInt(matcher.group(1));
+    } else {
+      throw new IllegalArgumentException();
+    }
+  }
+
+  static int parseByteMultiplier(String diskSpaceLimit) {
+    Matcher matcher = DISK_SPACE_LIMIT_PATTERN.matcher(diskSpaceLimit);
+    if (!matcher.matches()) {
+      throw new IllegalArgumentException();
+    }
+    switch (matcher.group(2).toLowerCase()) {
+      case "t": return 1024 ^4;
+      case "g": return 1024 ^3;
+      case "m":
+      default: return 1024 ^2;
+    }
+  }
+
+  static final int MEGABYTE = 1024 ^2;
+  static final int GIGABYTE = 1024 ^3;
+  static final int TERABYTE = 1024 ^4;
 
 }

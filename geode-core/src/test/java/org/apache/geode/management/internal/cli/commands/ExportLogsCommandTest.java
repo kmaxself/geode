@@ -14,34 +14,75 @@
  */
 package org.apache.geode.management.internal.cli.commands;
 
+import static org.apache.geode.management.internal.cli.commands.ExportLogsCommand.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import org.apache.geode.cache.Cache;
 import org.apache.geode.test.junit.categories.UnitTest;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
 
 @Category(UnitTest.class)
 public class ExportLogsCommandTest {
 
-  @Mock
-  private Cache cache;
-
-  @Before
-  public void before() throws Exception {
-    // customize behavior
-    this.cache = mock(Cache.class);
+  @Test
+  public void parseSize_sizeWithUnit_shouldReturnSize() throws Exception {
+    assertThat(ExportLogsCommand.parseSize("1000m")).isEqualTo(1000);
   }
 
   @Test
-  public void noLogsIsNotOverThreshold() throws Exception {
-//    ExportLogsCommand command = new ExportLogsCommand(this.cache);
-//
-//    assertThat(command.isOverDiskSpaceThreshold()).isFalse();
+  public void parseSize_sizeWithoutUnit_shouldReturnSize() throws Exception {
+    assertThat(ExportLogsCommand.parseSize("1000")).isEqualTo(1000);
+  }
+
+  @Test
+  public void parseByteMultiplier_sizeWithoutUnit_shouldReturnDefaultUnit() throws Exception {
+    assertThat(ExportLogsCommand.parseByteMultiplier("1000")).isEqualTo(MEGABYTE);
+  }
+
+  @Test
+  public void parseByteMultiplier_sizeWith_m_shouldReturnUnit() throws Exception {
+    assertThat(ExportLogsCommand.parseByteMultiplier("1000m")).isEqualTo(MEGABYTE);
+  }
+
+  @Test
+  public void parseByteMultiplier_sizeWith_g_shouldReturnUnit() throws Exception {
+    assertThat(ExportLogsCommand.parseByteMultiplier("1000g")).isEqualTo(GIGABYTE);
+  }
+
+  @Test
+  public void parseByteMultiplier_sizeWith_t_shouldReturnUnit() throws Exception {
+    assertThat(ExportLogsCommand.parseByteMultiplier("1000t")).isEqualTo(TERABYTE);
+  }
+
+  @Test
+  public void parseByteMultiplier_sizeWith_M_shouldReturnUnit() throws Exception {
+    assertThat(ExportLogsCommand.parseByteMultiplier("1000M")).isEqualTo(MEGABYTE);
+  }
+
+  @Test
+  public void parseByteMultiplier_sizeWith_G_shouldReturnUnit() throws Exception {
+    assertThat(ExportLogsCommand.parseByteMultiplier("1000G")).isEqualTo(GIGABYTE);
+  }
+
+  @Test
+  public void parseByteMultiplier_sizeWith_T_shouldReturnUnit() throws Exception {
+    assertThat(ExportLogsCommand.parseByteMultiplier("1000T")).isEqualTo(TERABYTE);
+  }
+
+  @Test
+  public void parseByteMultiplier_illegalUnit_shouldThrow() throws Exception {
+    assertThatThrownBy(() -> ExportLogsCommand.parseByteMultiplier("1000q")).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  public void parseSize_garbage_shouldThrow() throws Exception {
+    assertThatThrownBy(() -> ExportLogsCommand.parseSize("bizbap")).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  public void parseByteMultiplier_garbage_shouldThrow() throws Exception {
+    assertThatThrownBy(() -> ExportLogsCommand.parseByteMultiplier("bizbap")).isInstanceOf(IllegalArgumentException.class);
   }
 
 }

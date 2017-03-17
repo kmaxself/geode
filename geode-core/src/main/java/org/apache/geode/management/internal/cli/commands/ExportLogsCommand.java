@@ -51,14 +51,22 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-public class ExportLogCommand implements CommandMarker {
+public class ExportLogsCommand implements CommandMarker {
+
   private static final Logger logger = LogService.getLogger();
+
   public static final String FORMAT = "yyyy/MM/dd/HH/mm/ss/SSS/z";
   public static final String ONLY_DATE_FORMAT = "yyyy/MM/dd";
 
+  private GemFireCacheImpl cache;
+
+  public ExportLogsCommand() {
+    cache = GemFireCacheImpl.getInstance();
+  }
+
   @CliCommand(value = CliStrings.EXPORT_LOGS, help = CliStrings.EXPORT_LOGS__HELP)
   @CliMetaData(shellOnly = false, isFileDownloadOverHttp = true,
-      interceptor = "org.apache.geode.management.internal.cli.commands.ExportLogCommand$ExportLogsInterceptor",
+      interceptor = "org.apache.geode.management.internal.cli.commands.ExportLogsInterceptor",
       relatedTopic = {CliStrings.TOPIC_GEODE_SERVER, CliStrings.TOPIC_GEODE_DEBUG_UTIL})
   @ResourceOperation(resource = ResourcePermission.Resource.CLUSTER,
       operation = ResourcePermission.Operation.READ)
@@ -94,7 +102,13 @@ public class ExportLogCommand implements CommandMarker {
           specifiedDefaultValue = "true",
           help = CliStrings.EXPORT_LOGS__STATSONLY__HELP) boolean statsOnly) {
     Result result = null;
-    GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
+    GemFireCacheImpl cache = this.cache;
+    if (cache == null || cache.isClosed()) {
+      new Exception("KEN: cache is null").printStackTrace();
+      cache = GemFireCacheImpl.getInstance();
+    } else {
+      new Exception("KEN: cache has been created").printStackTrace();
+    }
     try {
       Set<DistributedMember> targetMembers =
           CliUtil.findMembersIncludingLocators(groups, memberIds);
@@ -173,79 +187,6 @@ public class ExportLogCommand implements CommandMarker {
 
   boolean isOverDiskSpaceThreshold() {
     return false;
-  }
-
-  /**
-   * after the export logs, will need to copy the tempFile to the desired location and delete the
-   * temp file.
-   */
-  public static class ExportLogsInterceptor extends AbstractCliAroundInterceptor {
-    @Override
-    public Result preExecution(GfshParseResult parseResult) {
-      // the arguments are in the order of it's being declared
-      Map<String, String> arguments = parseResult.getParamValueStrings();
-
-      // validates groupId and memberIds not both set
-      if (arguments.get("group") != null && arguments.get("member") != null) {
-        return ResultBuilder.createUserErrorResult("Can't specify both group and member.");
-      }
-
-      // validate log level
-      String logLevel = arguments.get("log-level");
-      if (StringUtils.isBlank(logLevel) || Level.getLevel(logLevel.toUpperCase()) == null) {
-        return ResultBuilder.createUserErrorResult("Invalid log level: " + logLevel);
-      }
-
-      // validate start date and end date
-      String start = arguments.get("start-time");
-      String end = arguments.get("end-time");
-      if (start != null && end != null) {
-        // need to make sure end is later than start
-        LocalDateTime startTime = ExportLogsFunction.parseTime(start);
-        LocalDateTime endTime = ExportLogsFunction.parseTime(end);
-        if (startTime.isAfter(endTime)) {
-          return ResultBuilder.createUserErrorResult("start-time has to be earlier than end-time.");
-        }
-      }
-
-      // validate onlyLogs and onlyStats
-      boolean onlyLogs = Boolean.parseBoolean(arguments.get("logs-only"));
-      boolean onlyStats = Boolean.parseBoolean(arguments.get("stats-only"));
-      if (onlyLogs && onlyStats) {
-        return ResultBuilder.createUserErrorResult("logs-only and stats-only can't both be true");
-      }
-
-      return ResultBuilder.createInfoResult("");
-    }
-
-    @Override
-    public Result postExecution(GfshParseResult parseResult, Result commandResult, Path tempFile) {
-      // in the command over http case, the command result is in the downloaded temp file
-      if (tempFile != null) {
-        Path dirPath;
-        String dirName = parseResult.getParamValueStrings().get("dir");
-        if (StringUtils.isBlank(dirName)) {
-          dirPath = Paths.get(System.getProperty("user.dir"));
-        } else {
-          dirPath = Paths.get(dirName);
-        }
-        String fileName = "exportedLogs_" + System.currentTimeMillis() + ".zip";
-        File exportedLogFile = dirPath.resolve(fileName).toFile();
-        try {
-          FileUtils.copyFile(tempFile.toFile(), exportedLogFile);
-          FileUtils.deleteQuietly(tempFile.toFile());
-          commandResult = ResultBuilder
-              .createInfoResult("Logs exported to: " + exportedLogFile.getAbsolutePath());
-        } catch (IOException e) {
-          logger.error(e.getMessage(), e);
-          commandResult = ResultBuilder.createGemFireErrorResult(e.getMessage());
-        }
-      } else if (commandResult.getStatus() == Result.Status.OK) {
-        commandResult = ResultBuilder.createInfoResult(
-            "Logs exported to the connected member's file system: " + commandResult.nextLine());
-      }
-      return commandResult;
-    }
   }
 
 }

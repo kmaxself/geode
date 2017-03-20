@@ -93,8 +93,9 @@ public class ExportLogsCommand implements CommandMarker {
       @CliOption(key = CliStrings.EXPORT_LOGS__STATSONLY, unspecifiedDefaultValue = "false",
           specifiedDefaultValue = "true",
           help = CliStrings.EXPORT_LOGS__STATSONLY__HELP) boolean statsOnly,
-      @CliOption(key = CliStrings.EXPORT_LOGS__FILESIZELIMIT, unspecifiedDefaultValue = "false",
-          specifiedDefaultValue = "true",
+      @CliOption(key = CliStrings.EXPORT_LOGS__FILESIZELIMIT,
+          unspecifiedDefaultValue = CliStrings.EXPORT_LOGS__FILESIZELIMIT__UNSPECIFIED_DEFAULT,
+          specifiedDefaultValue = CliStrings.EXPORT_LOGS__FILESIZELIMIT__SPECIFIED_DEFAULT,
           help = CliStrings.EXPORT_LOGS__FILESIZELIMIT__HELP) String fileSizeLimit) {
     Result result = null;
     GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
@@ -154,11 +155,16 @@ public class ExportLogsCommand implements CommandMarker {
       ZipUtils.zipDirectory(exportedLogsDir, exportedLogsZipFile);
       FileUtils.deleteDirectory(tempDir.toFile());
 
-      checkOverDiskSpaceThreshold(parseFileSizeLimit(fileSizeLimit), exportedLogsZipFile.toFile());
+//      try {
+        isFileSizeCheckEnabledAndWithinLimit(parseFileSizeLimit(fileSizeLimit),
+            exportedLogsZipFile.toFile());
+//      } catch (IllegalArgumentException e) {
+//        return ResultBuilder.createUserErrorResult("TOO BIG: fileSizeLimit = " + fileSizeLimit);
+//      }
 
       result = ResultBuilder.createInfoResult(exportedLogsZipFile.toString());
     } catch (Exception ex) {
-      logger.error(ex, ex);
+      logger.error(ex.getMessage(), ex);
       result = ResultBuilder.createGemFireErrorResult(ex.getMessage());
     } finally {
       ExportLogsFunction.destroyExportLogsRegion(cache);
@@ -183,12 +189,19 @@ public class ExportLogsCommand implements CommandMarker {
 
   /**
    * Throws IllegalArgumentException if file size is over fileSizeLimitBytes
+   * false == limit is zero
+   * true == file size is less than limit
+   * exception == file size is over limit
    */
-  void checkOverDiskSpaceThreshold(int fileSizeLimitBytes, File file) {
+  boolean isFileSizeCheckEnabledAndWithinLimit(int fileSizeLimitBytes, File file) {
     // TODO:GEODE-2420: warn user if exportedLogsZipFile size > threshold
-    if (FileUtils.sizeOf(file) > fileSizeLimitBytes) {
-      throw new IllegalArgumentException("TOO BIG"); // FileTooBigException
+    if (fileSizeLimitBytes < 1) {
+      return false;
     }
+    if (FileUtils.sizeOf(file) < fileSizeLimitBytes) {
+      return true;
+    }
+    throw new IllegalArgumentException("TOO BIG: fileSizeLimit = " + fileSizeLimitBytes + ", fileSize = " + FileUtils.sizeOf(file)); // FileTooBigException
   }
 
   static int parseSize(String diskSpaceLimit) {
@@ -206,15 +219,15 @@ public class ExportLogsCommand implements CommandMarker {
       throw new IllegalArgumentException();
     }
     switch (matcher.group(2).toLowerCase()) {
-      case "t": return 1024 ^4;
-      case "g": return 1024 ^3;
+      case "t": return (int)Math.pow(1024, 4);
+      case "g": return (int)Math.pow(1024, 3);
       case "m":
-      default: return 1024 ^2;
+      default: return (int)Math.pow(1024, 2);
     }
   }
 
-  static final int MEGABYTE = 1024 ^2;
-  static final int GIGABYTE = 1024 ^3;
-  static final int TERABYTE = 1024 ^4;
+  static final int MEGABYTE = (int)Math.pow(1024, 2);
+  static final int GIGABYTE = (int)Math.pow(1024, 3);
+  static final int TERABYTE = (int)Math.pow(1024, 4);
 
 }

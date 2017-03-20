@@ -53,7 +53,7 @@ public class ExportLogsFileSizeLimitTest {
 
     ExportLogsCommand exportLogsCommand = new ExportLogsCommand();
 
-    assertThatThrownBy(() -> exportLogsCommand.checkOverDiskSpaceThreshold(MEGABYTE, file));
+    assertThatThrownBy(() -> exportLogsCommand.isFileSizeCheckEnabledAndWithinLimit(MEGABYTE, file));
   }
 
   @Test
@@ -63,7 +63,17 @@ public class ExportLogsFileSizeLimitTest {
 
     ExportLogsCommand exportLogsCommand = new ExportLogsCommand();
 
-    assertThatThrownBy(() -> exportLogsCommand.checkOverDiskSpaceThreshold(MEGABYTE, file));
+    assertThat(exportLogsCommand.isFileSizeCheckEnabledAndWithinLimit(MEGABYTE, file)).isTrue();
+  }
+
+  @Test
+  public void sizeZeroIsUnlimitedSize() throws Exception {
+    File file = new File(this.dir, this.testName.getMethodName());
+    fillUpFile(file, MEGABYTE * 2);
+
+    ExportLogsCommand exportLogsCommand = new ExportLogsCommand();
+
+    assertThat(exportLogsCommand.isFileSizeCheckEnabledAndWithinLimit(0, file)).isFalse();
   }
 
   private void fillUpFile(File file, int sizeInBytes) throws IOException {

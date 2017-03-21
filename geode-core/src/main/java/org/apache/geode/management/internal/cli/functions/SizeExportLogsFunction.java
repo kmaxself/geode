@@ -11,18 +11,19 @@
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
  * or implied. See the License for the specific language governing permissions and limitations under
  * the License.
- *
  */
-
 package org.apache.geode.management.internal.cli.functions;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.geode.cache.AttributesFactory;
+import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.DataPolicy;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.Scope;
 import org.apache.geode.cache.execute.Function;
 import org.apache.geode.cache.execute.FunctionContext;
+import org.apache.geode.distributed.DistributedMember;
 import org.apache.geode.distributed.internal.DistributionConfig;
 import org.apache.geode.internal.InternalEntity;
 import org.apache.geode.internal.cache.GemFireCacheImpl;
@@ -47,105 +48,64 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
 
-/**
- * this function extracts the logs using a LogExporter which creates a zip file, and then writes the
- * zip file bytes into a replicated region, this in effect, "stream" the zip file bytes to the
- * locator
- *
- * The function only extracts .log and .gfs files under server's working directory
- */
-public class ExportLogsFunction implements Function, InternalEntity {
-  public static final String EXPORT_LOGS_REGION = "__exportLogsRegion";
+public class SizeExportLogsFunction implements Function, InternalEntity {
   private static final Logger LOGGER = LogService.getLogger();
   private static final long serialVersionUID = 1L;
-  private static final int BUFFER_SIZE = 1024;
 
+  private static final int BUFFER_SIZE = 1024;
 
   @Override
   public void execute(final FunctionContext context) {
     try {
       GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
       DistributionConfig config = cache.getDistributedSystem().getConfig();
-
-      String memberId = cache.getDistributedSystem().getMemberId();
-      LOGGER.info("ExportLogsFunction started for member {}", memberId);
-
-      Region exportLogsRegion = createOrGetExistingExportLogsRegion(false, cache);
-
       Args args = (Args) context.getArguments();
-      File baseLogFile = null;
-      File baseStatsFile = null;
 
-      if (args.isIncludeLogs() && !config.getLogFile().toString().isEmpty()) {
-        baseLogFile = config.getLogFile().getAbsoluteFile();
-      }
-      if (args.isIncludeStats() && !config.getStatisticArchiveFile().toString().isEmpty()) {
-        baseStatsFile = config.getStatisticArchiveFile().getAbsoluteFile();
-      }
+      long estimatedSize = estimateLogFileSize(cache.getMyId(), config.getLogFile(), config.getStatisticArchiveFile(), args);
 
-      LogFilter logFilter = new LogFilter(args.getLogLevel(), args.isThisLogLevelOnly(),
-          args.getStartTime(), args.getEndTime());
-
-      Path exportedZipFile = new LogExporter(logFilter, baseLogFile, baseStatsFile).export();
-
-      // nothing to return back
-      if (exportedZipFile == null) {
+      if (estimatedSize == -1) {
         context.getResultSender().lastResult(null);
-        return;
+      } else {
+        context.getResultSender().lastResult(Arrays.asList(new long[]{estimatedSize}));
       }
-
-      LOGGER.info("Streaming zipped file: " + exportedZipFile.toString());
-      try (FileInputStream inputStream = new FileInputStream(exportedZipFile.toFile())) {
-        byte[] buffer = new byte[BUFFER_SIZE];
-
-        int bytesRead;
-        while ((bytesRead = inputStream.read(buffer)) > 0) {
-          if (bytesRead == BUFFER_SIZE) {
-            exportLogsRegion.put(memberId, buffer);
-          } else {
-            exportLogsRegion.put(memberId, Arrays.copyOfRange(buffer, 0, bytesRead));
-          }
-        }
-      }
-
-      context.getResultSender().lastResult(null);
 
     } catch (Exception e) {
-      e.printStackTrace();
       LOGGER.error(e);
       context.getResultSender().sendException(e);
     }
   }
 
-  public static Region createOrGetExistingExportLogsRegion(boolean isInitiatingMember,
-      GemFireCacheImpl cache) throws IOException, ClassNotFoundException {
+  long estimateLogFileSize(final DistributedMember member, final File logFile, final File statArchive, final Args args)
+      throws ParseException, IOException {
+    LOGGER.info("ExportLogsFunction started for member {}", member);
 
-    Region exportLogsRegion = cache.getRegion(EXPORT_LOGS_REGION);
-    if (exportLogsRegion == null) {
-      AttributesFactory<String, Configuration> regionAttrsFactory =
-          new AttributesFactory<String, Configuration>();
-      regionAttrsFactory.setDataPolicy(DataPolicy.EMPTY);
-      regionAttrsFactory.setScope(Scope.DISTRIBUTED_ACK);
+    File baseLogFile = null;
+    File baseStatsFile = null;
 
-      if (isInitiatingMember) {
-        regionAttrsFactory.setCacheWriter(new ExportLogsCacheWriter());
-      }
-      InternalRegionArguments internalArgs = new InternalRegionArguments();
-      internalArgs.setIsUsedForMetaRegion(true);
-      exportLogsRegion =
-          cache.createVMRegion(EXPORT_LOGS_REGION, regionAttrsFactory.create(), internalArgs);
+    if (args.isIncludeLogs() && !logFile.toString().isEmpty()) {
+      baseLogFile = logFile.getAbsoluteFile();
+    }
+    if (args.isIncludeStats() && !statArchive.toString().isEmpty()) {
+      baseStatsFile = statArchive.getAbsoluteFile();
     }
 
-    return exportLogsRegion;
-  }
+    LogFilter logFilter = new LogFilter(args.getLogLevel(), args.isThisLogLevelOnly(),
+        args.getStartTime(), args.getEndTime());
 
-  public static void destroyExportLogsRegion(GemFireCacheImpl cache) {
+    // TODO: int estimatedSize = new LogSizer(logFilter, baseLogFile, baseStatsFile).export();
 
-    Region exportLogsRegion = cache.getRegion(EXPORT_LOGS_REGION);
-    if (exportLogsRegion == null) {
-      return;
+    Path exportedZipFile = new LogExporter(logFilter, baseLogFile, baseStatsFile).export();
+
+    // nothing to return back
+    if (exportedZipFile == null) {
+      return -1;
     }
-    exportLogsRegion.destroyRegion();
+
+    long estimatedSize = FileUtils.sizeOf(exportedZipFile.toFile());
+
+    LOGGER.info("Estimated log file size: " + estimatedSize);
+
+    return estimatedSize;
   }
 
   @Override
@@ -162,7 +122,7 @@ public class ExportLogsFunction implements Function, InternalEntity {
     private boolean includeStats;
 
     public Args(String startTime, String endTime, String logLevel, boolean logLevelOnly,
-        boolean logsOnly, boolean statsOnly) {
+                boolean logsOnly, boolean statsOnly) {
       this.startTime = parseTime(startTime);
       this.endTime = parseTime(endTime);
 

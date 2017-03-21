@@ -26,6 +26,7 @@ import org.apache.geode.management.cli.ConverterHint;
 import org.apache.geode.management.cli.Result;
 import org.apache.geode.management.internal.cli.CliUtil;
 import org.apache.geode.management.internal.cli.functions.ExportLogsFunction;
+import org.apache.geode.management.internal.cli.functions.SizeExportLogsFunction;
 import org.apache.geode.management.internal.cli.i18n.CliStrings;
 import org.apache.geode.management.internal.cli.result.ResultBuilder;
 import org.apache.geode.management.internal.cli.util.ExportLogsCacheWriter;
@@ -42,6 +43,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -107,6 +109,27 @@ public class ExportLogsCommand implements CommandMarker {
         return ResultBuilder.createUserErrorResult(CliStrings.NO_MEMBERS_FOUND_MESSAGE);
       }
 
+      if (true) {
+        // TODO: get unzipped sizes from all servers first
+        Map<String, Integer> fileSizesFromMembers = new HashMap<>();
+        for (DistributedMember server : targetMembers) {
+          SizeExportLogsFunction.Args
+              args =
+              new SizeExportLogsFunction.Args(start, end, logLevel, onlyLogLevel, logsOnly,
+                  statsOnly);
+
+          List<Long> results = (List<Long>)CliUtil.executeFunction(new SizeExportLogsFunction(), args, server)
+                  .getResult();
+
+          long estimatedSize = results.get(0);
+
+          logger.info("Received file size from member {}: {}", server.getId(), estimatedSize);
+        }
+
+        // TODO: Total all unzipped sizes
+      }
+
+      // get zipped files from all servers next
       Map<String, Path> zipFilesFromMembers = new HashMap<>();
       for (DistributedMember server : targetMembers) {
         Region region = ExportLogsFunction.createOrGetExistingExportLogsRegion(true, cache);

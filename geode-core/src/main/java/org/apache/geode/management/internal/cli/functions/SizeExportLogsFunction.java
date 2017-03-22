@@ -15,6 +15,8 @@
 package org.apache.geode.management.internal.cli.functions;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.geode.cache.Cache;
+import org.apache.geode.cache.CacheFactory;
 import org.apache.geode.cache.execute.Function;
 import org.apache.geode.cache.execute.FunctionContext;
 import org.apache.geode.distributed.DistributedMember;
@@ -35,6 +37,10 @@ public class SizeExportLogsFunction extends ExportLogsFunction implements Functi
   private static final Logger LOGGER = LogService.getLogger();
   private static final long serialVersionUID = 1L;
 
+  protected Cache getCache() {
+    return CacheFactory.getAnyInstance();
+  }
+
   @Override
   public void execute(final FunctionContext context) {
     try {
@@ -44,22 +50,17 @@ public class SizeExportLogsFunction extends ExportLogsFunction implements Functi
 
       long estimatedSize = estimateLogFileSize(cache.getMyId(), config.getLogFile(), config.getStatisticArchiveFile(), args);
 
-      if (estimatedSize == -1) {
-        context.getResultSender().lastResult(null);
-      } else {
         context.getResultSender().lastResult(Arrays.asList(new long[]{estimatedSize}));
-      }
 
     } catch (Exception e) {
-      LOGGER.error(e);
+      e.printStackTrace();
+      LOGGER.error(e.getMessage());
       context.getResultSender().sendException(e);
     }
   }
 
   long estimateLogFileSize(final DistributedMember member, final File logFile, final File statArchive, final Args args)
       throws ParseException, IOException {
-    LOGGER.info("ExportLogsFunction started for member {}", member);
-
     File baseLogFile = null;
     File baseStatsFile = null;
 
@@ -75,80 +76,8 @@ public class SizeExportLogsFunction extends ExportLogsFunction implements Functi
 
     long estimatedSize = new LogSizer(logFilter, baseLogFile, baseStatsFile).getFilteredSize();
 
-    LOGGER.info("Estimated log file size: " + estimatedSize);
+    LOGGER.info("Estimated exported log file size: " + estimatedSize);
 
     return estimatedSize;
   }
-
-//  @Override
-//  public boolean isHA() {
-//    return false;
-//  }
-//
-//  public static class Args implements Serializable {
-//    private LocalDateTime startTime;
-//    private LocalDateTime endTime;
-//    private Level logLevel;
-//    private boolean thisLogLevelOnly;
-//    private boolean includeLogs;
-//    private boolean includeStats;
-//
-//    public Args(String startTime, String endTime, String logLevel, boolean logLevelOnly,
-//                boolean logsOnly, boolean statsOnly) {
-//      this.startTime = parseTime(startTime);
-//      this.endTime = parseTime(endTime);
-//
-//      if (StringUtils.isBlank(logLevel)) {
-//        this.logLevel = Level.INFO;
-//      } else {
-//        this.logLevel = Level.getLevel(logLevel.toUpperCase());
-//      }
-//      this.thisLogLevelOnly = logLevelOnly;
-//
-//      this.includeLogs = !statsOnly;
-//      this.includeStats = !logsOnly;
-//    }
-//
-//    public LocalDateTime getStartTime() {
-//      return startTime;
-//    }
-//
-//    public LocalDateTime getEndTime() {
-//      return endTime;
-//    }
-//
-//    public Level getLogLevel() {
-//      return logLevel;
-//    }
-//
-//    public boolean isThisLogLevelOnly() {
-//      return thisLogLevelOnly;
-//    }
-//
-//    public boolean isIncludeLogs() {
-//      return includeLogs;
-//    }
-//
-//    public boolean isIncludeStats() {
-//      return includeStats;
-//    }
-//  }
-//
-//  public static LocalDateTime parseTime(String dateString) {
-//    if (dateString == null) {
-//      return null;
-//    }
-//
-//    try {
-//      SimpleDateFormat df = new SimpleDateFormat(ExportLogsCommand.FORMAT);
-//      return df.parse(dateString).toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
-//    } catch (ParseException e) {
-//      try {
-//        SimpleDateFormat df = new SimpleDateFormat(ExportLogsCommand.ONLY_DATE_FORMAT);
-//        return df.parse(dateString).toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
-//      } catch (ParseException e1) {
-//        return null;
-//      }
-//    }
-//  }
 }

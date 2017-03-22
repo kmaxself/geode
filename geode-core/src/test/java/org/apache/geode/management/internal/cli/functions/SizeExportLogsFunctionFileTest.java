@@ -43,12 +43,11 @@ import java.util.LinkedList;
 import java.util.List;
 
 @Category(IntegrationTest.class)
-public class SizeExportLogsFunctionIntegrationTest {
+public class SizeExportLogsFunctionFileTest {
 
   private File dir;
   private DistributedMember member;
   private SizeExportLogsFunction.Args nonFilteringArgs;
-  private TestResultSender resultSender;
   private FunctionContext functionContext;
 
   @Rule
@@ -61,10 +60,7 @@ public class SizeExportLogsFunctionIntegrationTest {
   public void before() throws Exception {
     this.dir = this.temporaryFolder.getRoot();
     this.member = mock(DistributedMember.class);
-
     this.nonFilteringArgs = new Args(null, null, null, false,false, false);
-    resultSender = new TestResultSender();
-    functionContext = new FunctionContextImpl("functionId", nonFilteringArgs, resultSender);
   }
 
   @Test
@@ -143,16 +139,6 @@ public class SizeExportLogsFunctionIntegrationTest {
 
   @Test
   public void negativeEstimatedSize() throws Exception {
-    File nullLogFile = new File(dir.getPath(), "nullLogFile");
-    File nullStatFile = new File(dir.getPath(), "nullStatFile");
-    SizeExportLogsFunction function = new SizeExportLogsFunction();
-    SizeExportLogsFunction spyFunction = spy(function);
-
-    doReturn(-1L).when(spyFunction).estimateLogFileSize(this.member, nullLogFile, nullStatFile, nonFilteringArgs);
-//    when(spyFunction.estimateLogFileSize(this.member, nullLogFile, nullStatFile, nonFilteringArgs)).thenReturn(-1L);
-
-    spyFunction.execute(functionContext);
-
 
   }
 
@@ -187,32 +173,4 @@ public class SizeExportLogsFunctionIntegrationTest {
     writer.close();
   }
 
-  private static class TestResultSender implements ResultSender {
-
-    private final List<Object> results = new LinkedList<Object>();
-
-    private Throwable t;
-
-    protected List<Object> getResults() throws Throwable {
-      if (t != null) {
-        throw t;
-      }
-      return Collections.unmodifiableList(results);
-    }
-
-    @Override
-    public void lastResult(final Object lastResult) {
-      results.add(lastResult);
-    }
-
-    @Override
-    public void sendResult(final Object oneResult) {
-      results.add(oneResult);
-    }
-
-    @Override
-    public void sendException(final Throwable t) {
-      this.t = t;
-    }
-  }
 }

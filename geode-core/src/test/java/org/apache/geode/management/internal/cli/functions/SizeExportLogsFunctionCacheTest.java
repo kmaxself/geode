@@ -26,6 +26,7 @@ import org.apache.geode.cache.execute.FunctionContext;
 import org.apache.geode.cache.execute.ResultSender;
 import org.apache.geode.distributed.DistributedMember;
 import org.apache.geode.internal.cache.execute.FunctionContextImpl;
+import org.apache.geode.management.internal.cli.functions.ExportedLogsSizeDetail;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -90,9 +91,11 @@ public class SizeExportLogsFunctionCacheTest {
     TestResultSender resultSender = new TestResultSender();
     FunctionContext context = new FunctionContextImpl("functionId", nonFilteringArgs, resultSender);
 
-    long expectedSize = FileUtils.sizeOf(logFile) + FileUtils.sizeOf(statFile);
+    // log and stat files sizes are not constant with a real cache running, so check for the sizer estimate within a range
+    long initalFileSizes = FileUtils.sizeOf(logFile) + FileUtils.sizeOf(statFile);
     new SizeExportLogsFunction().execute(context);
-    getAndVerifySizeEstimate(resultSender, expectedSize);
+    long finalFileSizes = FileUtils.sizeOf(logFile) + FileUtils.sizeOf(statFile);
+    getAndVerifySizeEstimate(resultSender, initalFileSizes, finalFileSizes);
   }
 
   @Test
@@ -111,14 +114,18 @@ public class SizeExportLogsFunctionCacheTest {
 
   private void getAndVerifySizeEstimate(TestResultSender resultSender, long expectedSize)
       throws Throwable {
+    getAndVerifySizeEstimate(resultSender, expectedSize, expectedSize);
+  }
+
+    private void getAndVerifySizeEstimate(TestResultSender resultSender, long minExpected, long maxExpected)
+      throws Throwable {
     List<?> results = resultSender.getResults();
 
     assertThat(results).isNotNull();
     assertThat(results.size()).isEqualTo(1);
     List<?> result = (List<?>)results.get(0);
     assertThat(result).isNotNull();
-    assertThat(((long[])result.get(0))[0]).isEqualTo(expectedSize);
-
+    assertThat(((ExportedLogsSizeDetail) result.get(0)).getLogsSize()).isGreaterThanOrEqualTo(minExpected).isLessThanOrEqualTo(maxExpected);
   }
 
   @Test
@@ -130,11 +137,6 @@ public class SizeExportLogsFunctionCacheTest {
 
     new SizeExportLogsFunction().execute(context);
     assertThatThrownBy(() -> resultSender.getResults()).isInstanceOf(NullPointerException.class);
-
-//    List<?> results = resultSender.getResults();
-//    List<?> result = (List<?>)results.get(0);
-//    assertThat(result).isInstanceOf(Exception.class);
-
   }
 
   private static class TestResultSender implements ResultSender {

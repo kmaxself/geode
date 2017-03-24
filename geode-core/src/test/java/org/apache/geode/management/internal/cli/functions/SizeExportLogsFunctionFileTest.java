@@ -15,18 +15,16 @@
 package org.apache.geode.management.internal.cli.functions;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import org.apache.geode.cache.execute.FunctionContext;
-import org.apache.geode.cache.execute.ResultSender;
-import org.apache.geode.internal.cache.execute.FunctionContextImpl;
 import org.apache.geode.management.internal.cli.functions.ExportLogsFunction.Args;
 import org.apache.commons.io.FileUtils;
 import org.apache.geode.distributed.DistributedMember;
 import org.apache.geode.test.junit.categories.IntegrationTest;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -38,8 +36,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedList;
 import java.util.List;
 
 @Category(IntegrationTest.class)
@@ -63,6 +59,11 @@ public class SizeExportLogsFunctionFileTest {
     this.nonFilteringArgs = new Args(null, null, null, false,false, false);
   }
 
+  @After
+  public void after() throws Exception {
+    FileUtils.deleteDirectory(dir);
+  }
+
   @Test
   public void bothFiles_returnsCombinedSize() throws Exception {
     List<File> logFiles = createLogFiles(new File(dir.getName(), testName.getMethodName()), 1, 1,
@@ -84,11 +85,9 @@ public class SizeExportLogsFunctionFileTest {
     expectedSize = 0;
     List<File> logFiles = createLogFiles(new File(dir.getName(), testName.getMethodName()), 1, 3, FileUtils.ONE_KB);
     logFiles.forEach((file) -> {expectedSize += FileUtils.sizeOf(file);});
-//    long logFileSize = FileUtils.sizeOf(logFile);
 
     List<File> statFiles = createStatFiles(new File(dir.getName(), testName.getMethodName()), 1, 2, FileUtils.ONE_KB * 2);
     statFiles.forEach((file) -> {expectedSize += FileUtils.sizeOf(file);});
-//    long statFileSize = FileUtils.sizeOf(statArchive);
 
     SizeExportLogsFunction function = new SizeExportLogsFunction();
     assertThat(function.estimateLogFileSize(this.member, logFiles.get(0), statFiles.get(0), nonFilteringArgs)).isEqualTo(expectedSize);
@@ -97,12 +96,8 @@ public class SizeExportLogsFunctionFileTest {
   @Test
   public void emptyFiles_returnsZeroSize() throws Exception {
     List<File> logFiles = createLogFiles(new File(dir.getName(), testName.getMethodName()), 1, 3, 0);
-//    logFiles.forEach((file) -> {expectedSize += FileUtils.sizeOf(file);});
-//    long logFileSize = FileUtils.sizeOf(logFile);
 
     List<File> statFiles = createStatFiles(new File(dir.getName(), testName.getMethodName()), 1, 2, 0);
-//    statFiles.forEach((file) -> {expectedSize += FileUtils.sizeOf(file);});
-//    long statFileSize = FileUtils.sizeOf(statArchive);
     SizeExportLogsFunction function = new SizeExportLogsFunction();
     assertThat(function.estimateLogFileSize(this.member, logFiles.get(0), statFiles.get(0), nonFilteringArgs)).isEqualTo(0);
   }
@@ -135,11 +130,6 @@ public class SizeExportLogsFunctionFileTest {
       files.add(file);
     }
     return files;
-  }
-
-  @Test
-  public void negativeEstimatedSize() throws Exception {
-
   }
 
   private String baseName(String logFileName) {

@@ -14,6 +14,7 @@
  */
 package org.apache.geode.management.internal.cli.util;
 
+import static java.util.List.*;
 import static java.util.stream.Collectors.toList;
 
 import org.apache.commons.io.FileUtils;
@@ -27,6 +28,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.text.ParseException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Scanner;
 import java.util.function.Predicate;
@@ -60,7 +62,6 @@ public class LogSizer {
    *         export.
    */
   public long getFilteredSize() throws IOException {
-    Path tempDirectory = Files.createTempDirectory("exportLogs");
 
     if (baseLogFile != null) {
       for (Path logFile : findLogFiles(baseLogFile.toPath().getParent())) {
@@ -70,11 +71,10 @@ public class LogSizer {
 
     if (baseStatsFile != null) {
       for (Path statFile : findStatFiles(baseStatsFile.toPath().getParent())) {
-        filteredSize += FileUtils.sizeOf(statFile.toFile());
+        filteredSize += statFile.toFile().length();
+//        filteredSize += FileUtils.sizeOf(statFile.toFile());
       }
     }
-
-    FileUtils.deleteDirectory(tempDirectory.toFile());
 
     return filteredSize;
   }
@@ -98,16 +98,6 @@ public class LogSizer {
     return size;
   }
 
-
-  private void writeLine(String line, BufferedWriter writer) {
-    try {
-      writer.write(line);
-      writer.newLine();
-    } catch (IOException e) {
-      throw new RuntimeException("Unable to write to log file", e);
-    }
-  }
-
   protected List<Path> findLogFiles(Path workingDir) throws IOException {
     Predicate<Path> logFileSelector = (Path file) -> file.toString().toLowerCase().endsWith(".log");
     return findFiles(workingDir, logFileSelector);
@@ -122,6 +112,11 @@ public class LogSizer {
 
   private List<Path> findFiles(Path workingDir, Predicate<Path> fileSelector) throws IOException {
     Stream<Path> selectedFiles =
+        null;
+    if (!workingDir.toFile().isDirectory()) {
+      return Collections.emptyList();
+    }
+    selectedFiles =
         Files.list(workingDir).filter(fileSelector).filter(this.logFilter::acceptsFile);
 
     return selectedFiles.collect(toList());

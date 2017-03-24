@@ -47,10 +47,12 @@ public class SizeExportLogsFunction extends ExportLogsFunction implements Functi
       GemFireCacheImpl cache = GemFireCacheImpl.getInstance();
       DistributionConfig config = cache.getDistributedSystem().getConfig();
       Args args = (Args) context.getArguments();
-
+      // TODO: Find how much space is availbel on the disk where the temporary copies of the logs will be written
+      long availableDisk = config.getLogFile().getUsableSpace();
       long estimatedSize = estimateLogFileSize(cache.getMyId(), config.getLogFile(), config.getStatisticArchiveFile(), args);
 
-        context.getResultSender().lastResult(Arrays.asList(new long[]{estimatedSize}));
+//      context.getResultSender().lastResult(Arrays.asList(new long[]{estimatedSize}));
+      context.getResultSender().lastResult(Arrays.asList(new ExportedLogsSizeDetail(estimatedSize, availableDisk)));
 
     } catch (Exception e) {
       e.printStackTrace();
@@ -61,6 +63,8 @@ public class SizeExportLogsFunction extends ExportLogsFunction implements Functi
 
   long estimateLogFileSize(final DistributedMember member, final File logFile, final File statArchive, final Args args)
       throws ParseException, IOException {
+    LOGGER.info("SizeExportLogsFunction started for member {}", member);
+
     File baseLogFile = null;
     File baseStatsFile = null;
 
@@ -76,7 +80,7 @@ public class SizeExportLogsFunction extends ExportLogsFunction implements Functi
 
     long estimatedSize = new LogSizer(logFilter, baseLogFile, baseStatsFile).getFilteredSize();
 
-    LOGGER.info("Estimated exported log file size: " + estimatedSize);
+    LOGGER.info("Estimated log file size: " + estimatedSize);
 
     return estimatedSize;
   }
